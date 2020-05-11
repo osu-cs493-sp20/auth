@@ -11,6 +11,7 @@ const {
   getUserById,
   validateUser
 } = require('../models/user');
+const { generateAuthToken, requireAuthentication } = require('../lib/auth');
 
 router.post('/', async (req, res) => {
   if (validateAgainstSchema(req.body, UserSchema)) {
@@ -32,19 +33,25 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res, next) => {
-  try {
-    const user = await getUserById(req.params.id);
-    if (user) {
-      res.status(200).send(user);
-    } else {
-      next();
-    }
-  } catch (err) {
-    console.error("  -- Error:", err);
-    res.status(500).send({
-      error: "Error fetching user.  Try again later."
+router.get('/:id', requireAuthentication, async (req, res, next) => {
+  if (req.user !== req.params.id) {
+    res.status(403).send({
+      error: "Unauthorized to access the specified resource"
     });
+  } else {
+    try {
+      const user = await getUserById(req.params.id);
+      if (user) {
+        res.status(200).send(user);
+      } else {
+        next();
+      }
+    } catch (err) {
+      console.error("  -- Error:", err);
+      res.status(500).send({
+        error: "Error fetching user.  Try again later."
+      });
+    }
   }
 });
 
@@ -56,7 +63,10 @@ router.post('/login', async (req, res) => {
         req.body.password
       );
       if (authenticated) {
-        res.status(200).send({});
+        const token = generateAuthToken(req.body.id);
+        res.status(200).send({
+          token: token
+        });
       } else {
         res.status(401).send({
           error: "Invalid authentication credentials."
